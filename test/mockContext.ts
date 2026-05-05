@@ -396,3 +396,67 @@ export const mockPullRequestReviewCommentContext: ParsedGitHubContext = {
   isPR: true,
   inputs: defaultInputs,
 };
+
+// Gitea pull_request_review_comment event with no payload.comment (body under payload.review.content)
+export const mockGiteaPullRequestReviewCommentContext: ParsedGitHubContext = {
+  runId: "1234567890",
+  eventName: "pull_request_review_comment",
+  eventAction: "created",
+  repository: defaultRepository,
+  actor: "gitea-reviewer",
+  payload: {
+    action: "created",
+    // Gitea may not have payload.comment, body is under review.content
+    review: {
+      content: "/claude can you check this inline comment?",
+    },
+    pull_request: {
+      number: 999,
+      title: "Gitea: Optimize algorithm",
+      body: "This PR optimizes the algorithm",
+      user: {
+        login: "gitea-dev",
+        id: 11111,
+      },
+    },
+    repository: {
+      name: "test-repo",
+      full_name: "test-owner/test-repo",
+      private: false,
+      owner: {
+        login: "test-owner",
+      },
+    },
+  } as any as PullRequestReviewCommentEvent, // Cast to any to simulate Gitea payload
+  entityNumber: 999,
+  isPR: true,
+  inputs: { ...defaultInputs, triggerPhrase: "/claude" },
+};
+
+// pull_request_review_comment event with undefined comment (no body anywhere)
+export const mockUndefinedCommentContext: ParsedGitHubContext = {
+  runId: "1234567890",
+  eventName: "pull_request_review_comment",
+  eventAction: "created",
+  repository: defaultRepository,
+  actor: "test-user",
+  payload: {
+    action: "created",
+    // No comment, no review
+    pull_request: {
+      number: 123,
+      title: "Test PR",
+      body: "Test body",
+      user: { login: "test", id: 1 },
+    },
+    repository: {
+      name: "test-repo",
+      full_name: "test-owner/test-repo",
+      private: false,
+      owner: { login: "test-owner" },
+    },
+  } as any as PullRequestReviewCommentEvent,
+  entityNumber: 123,
+  isPR: true,
+  inputs: { ...defaultInputs, triggerPhrase: "/claude" },
+};
