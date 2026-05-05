@@ -16,6 +16,7 @@ import {
   isIssueCommentEvent,
   isPullRequestReviewEvent,
   isPullRequestReviewCommentEvent,
+  getCommentBody,
 } from "../github/context";
 import type { ParsedGitHubContext } from "../github/context";
 import type { CommonFields, PreparedContext, EventData } from "./types";
@@ -120,7 +121,9 @@ export function buildDisallowedToolsString(
   // If user has explicitly allowed some hardcoded disallowed tools, remove them from disallowed list
   const allowedList = normalizeToolList(allowedTools);
   if (allowedList.length > 0) {
-    disallowedTools = disallowedTools.filter((tool) => !allowedList.includes(tool));
+    disallowedTools = disallowedTools.filter(
+      (tool) => !allowedList.includes(tool),
+    );
   }
 
   let allDisallowedTools = disallowedTools.join(",");
@@ -164,16 +167,16 @@ export function prepareContext(
   let commentBody: string | undefined;
 
   if (isIssueCommentEvent(context)) {
-    commentId = context.payload.comment.id.toString();
-    commentBody = context.payload.comment.body;
-    triggerUsername = context.payload.comment.user.login;
+    commentId = context.payload.comment?.id?.toString();
+    commentBody = context.payload.comment?.body;
+    triggerUsername = context.payload.comment?.user?.login;
   } else if (isPullRequestReviewEvent(context)) {
-    commentBody = context.payload.review.body ?? "";
-    triggerUsername = context.payload.review.user.login;
+    commentBody = context.payload.review?.body ?? "";
+    triggerUsername = context.payload.review?.user?.login;
   } else if (isPullRequestReviewCommentEvent(context)) {
-    commentId = context.payload.comment.id.toString();
-    commentBody = context.payload.comment.body;
-    triggerUsername = context.payload.comment.user.login;
+    commentId = context.payload.comment?.id?.toString();
+    commentBody = getCommentBody(context);
+    triggerUsername = context.payload.comment?.user?.login;
   } else if (isIssuesEvent(context)) {
     triggerUsername = context.payload.issue.user.login;
   }

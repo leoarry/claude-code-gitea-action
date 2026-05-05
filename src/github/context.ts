@@ -196,3 +196,32 @@ export function isIssuesAssignedEvent(
 ): context is ParsedGitHubContext & { payload: IssuesAssignedEvent } {
   return isIssuesEvent(context) && context.eventAction === "assigned";
 }
+
+export function isGiteaEnvironment(): boolean {
+  const giteaApiUrl = process.env.GITEA_API_URL?.trim();
+  return Boolean(
+    giteaApiUrl &&
+      giteaApiUrl.length > 0 &&
+      !giteaApiUrl.includes("api.github.com") &&
+      !giteaApiUrl.includes("github.com"),
+  );
+}
+
+export function getCommentBody(
+  context: ParsedGitHubContext,
+): string | undefined {
+  if (isIssueCommentEvent(context)) {
+    return context.payload.comment?.body;
+  }
+
+  if (isPullRequestReviewCommentEvent(context)) {
+    const githubBody = context.payload.comment?.body;
+    if (githubBody) return githubBody;
+
+    if (isGiteaEnvironment()) {
+      return (context.payload as any).review?.content;
+    }
+  }
+
+  return undefined;
+}
