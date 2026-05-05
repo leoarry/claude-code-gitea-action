@@ -8,7 +8,7 @@ function deriveApiUrl(serverUrl: string): string {
 }
 
 // Get the appropriate server URL, prioritizing GITEA_SERVER_URL for custom Gitea instances
-function getServerUrl(): string {
+export function getServerUrl(): string {
   // First check for GITEA_SERVER_URL (can be set by user)
   const giteaServerUrl = process.env.GITEA_SERVER_URL;
   if (giteaServerUrl && giteaServerUrl !== "") {

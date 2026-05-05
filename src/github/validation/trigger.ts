@@ -8,7 +8,6 @@ import {
   isPullRequestReviewEvent,
   isPullRequestReviewCommentEvent,
   getCommentBody,
-  isGiteaEnvironment,
 } from "../context";
 import type { IssuesLabeledEvent } from "@octokit/webhooks-types";
 import type { ParsedGitHubContext } from "../context";
