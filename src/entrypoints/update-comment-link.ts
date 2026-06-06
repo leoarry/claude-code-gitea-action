@@ -38,21 +38,23 @@ async function run() {
     let isPRReviewComment = false;
 
     try {
-      // GitHub has separate ID namespaces for review comments and issue comments
-      // We need to use the correct API based on the event type
+      // Try PR review comment endpoint first for review comment events
       if (isPullRequestReviewCommentEvent(context)) {
-        // For PR review comments, use the pulls API
-        console.log(`Fetching PR review comment ${commentId}`);
-        const response = await client.api.customRequest(
-          "GET",
-          `/api/v1/repos/${owner}/${repo}/pulls/comments/${commentId}`,
-        );
-        comment = response.data;
-        isPRReviewComment = true;
-        console.log("Successfully fetched as PR review comment");
+        try {
+          console.log(`Fetching PR review comment ${commentId}`);
+          const response = await client.api.customRequest(
+            "GET",
+            `/api/v1/repos/${owner}/${repo}/pulls/comments/${commentId}`,
+          );
+          comment = response.data;
+          isPRReviewComment = true;
+          console.log("Successfully fetched as PR review comment");
+        } catch {
+          // 404 means it's an issue comment — fall through to issue comment fetch
+        }
       }
 
-      // For all other event types, use the issues API
+      // Fall back to issue comment (also the default for all non-review events)
       if (!comment) {
         console.log(`Fetching issue comment ${commentId}`);
         const response = await client.api.customRequest(
