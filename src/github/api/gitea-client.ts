@@ -200,6 +200,25 @@ export class GiteaApiClient {
     );
   }
 
+  async listPullRequestReviews(owner: string, repo: string, prNumber: number) {
+    return this.request(
+      "GET",
+      `/api/v1/repos/${owner}/${repo}/pulls/${prNumber}/reviews`,
+    );
+  }
+
+  async listPullRequestReviewComments(
+    owner: string,
+    repo: string,
+    prNumber: number,
+    reviewId: number,
+  ) {
+    return this.request(
+      "GET",
+      `/api/v1/repos/${owner}/${repo}/pulls/${prNumber}/reviews/${reviewId}/comments`,
+    );
+  }
+
   async createPullRequestComment(
     owner: string,
     repo: string,
