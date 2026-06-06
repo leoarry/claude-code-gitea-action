@@ -17,10 +17,7 @@ import { prepareMcpConfig } from "../mcp/install-mcp-server";
 import { createPrompt } from "../create-prompt";
 import { createClient } from "../github/api/client";
 import { fetchGitHubData } from "../github/data/fetcher";
-import {
-  parseGitHubContext,
-  isPullRequestReviewCommentEvent,
-} from "../github/context";
+import { parseGitHubContext } from "../github/context";
 import { getMode } from "../modes/registry";
 
 async function run() {
@@ -43,73 +40,8 @@ async function run() {
       );
     }
 
-    // Step 4: Gitea sends empty review.content in the webhook payload for
-    // pull_request_review_comment events. Fetch the actual inline comment
-    // content from the API and inject it so the trigger check can find it.
-    // Only handle pull_request_review_comment here — pull_request_review fires
-    // for the same user action and would cause a double trigger.
-    if (
-      isPullRequestReviewCommentEvent(context) &&
-      (context.payload.comment?.body ?? context.payload.review?.content) === ""
-    ) {
-      try {
-        const { owner, repo } = context.repository;
-        const reviewsResp = await client.api.listPullRequestReviews(
-          owner,
-          repo,
-          context.entityNumber,
-        );
-        const reviewsList: any[] = Array.isArray(reviewsResp.data)
-          ? reviewsResp.data
-          : [];
-        if (reviewsList.length > 0) {
-          const latestReview = reviewsList.sort(
-            (a: any, b: any) =>
-              new Date(b.submitted_at ?? b.updated_at).getTime() -
-              new Date(a.submitted_at ?? a.updated_at).getTime(),
-          )[0];
-          const commentsResp = await client.api.listPullRequestReviewComments(
-            owner,
-            repo,
-            context.entityNumber,
-            latestReview.id,
-          );
-          const commentsList: any[] = Array.isArray(commentsResp.data)
-            ? commentsResp.data
-            : [];
-          const latestComment = commentsList.sort(
-            (a: any, b: any) =>
-              new Date(b.updated_at ?? b.created_at).getTime() -
-              new Date(a.updated_at ?? a.created_at).getTime(),
-          )[0];
-          const content = latestComment?.body || latestReview?.body;
-          if (content) {
-            (context.payload as any).review = {
-              ...(context.payload as any).review,
-              content,
-            };
-            // Inject comment id and user so commentId is set correctly downstream
-            if (latestComment) {
-              (context.payload as any).comment = {
-                id: latestComment.id,
-                body: latestComment.body,
-                user: latestComment.user,
-              };
-            }
-            (context.payload as any).sender ??= {
-              login: latestComment?.user?.login ?? latestReview?.user?.login,
-            };
-          }
-        }
-      } catch (error) {
-        console.warn(
-          `Could not fetch Gitea inline review comment body: ${error}`,
-        );
-      }
-    }
-
-    // Step 5: Check trigger conditions
-    const containsTrigger = await checkTriggerAction(context);
+    // Step 4: Check trigger conditions
+    const containsTrigger = await checkTriggerAction(context, client.api);
 
     // Set outputs that are always needed
     core.setOutput("contains_trigger", containsTrigger.toString());
@@ -120,19 +52,19 @@ async function run() {
       return;
     }
 
-    // Step 6: Check if actor is human
+    // Step 5: Check if actor is human
     await checkHumanActor(client.api, context);
 
     const mode = getMode(context.inputs.mode);
 
-    // Step 7: Create initial tracking comment (if required by mode)
+    // Step 6: Create initial tracking comment (if required by mode)
     let commentId: number | undefined;
     if (mode.shouldCreateTrackingComment()) {
       commentId = await createInitialComment(client.api, context);
       core.setOutput("claude_comment_id", commentId!.toString());
     }
 
-    // Step 8: Fetch GitHub data (once for both branch setup and prompt creation)
+    // Step 7: Fetch GitHub data (once for both branch setup and prompt creation)
     const githubData = await fetchGitHubData({
       client: client,
       repository: `${context.repository.owner}/${context.repository.repo}`,
@@ -140,14 +72,14 @@ async function run() {
       isPR: context.isPR,
     });
 
-    // Step 9: Setup branch
+    // Step 8: Setup branch
     const branchInfo = await setupBranch(client, githubData, context);
     core.setOutput("BASE_BRANCH", branchInfo.baseBranch);
     if (branchInfo.claudeBranch) {
       core.setOutput("CLAUDE_BRANCH", branchInfo.claudeBranch);
     }
 
-    // Step 10: Update initial comment with branch link (only if a claude branch was created)
+    // Step 9: Update initial comment with branch link (only if a claude branch was created)
     if (commentId && branchInfo.claudeBranch) {
       await updateTrackingComment(
         client,
@@ -157,7 +89,7 @@ async function run() {
       );
     }
 
-    // Step 11: Create prompt file
+    // Step 10: Create prompt file
     const modeContext = mode.prepareContext(context, {
       commentId,
       baseBranch: branchInfo.baseBranch,
@@ -166,7 +98,7 @@ async function run() {
 
     await createPrompt(mode, modeContext, githubData, context);
 
-    // Step 12: Get MCP configuration
+    // Step 11: Get MCP configuration
     const mcpConfig = await prepareMcpConfig({
       githubToken,
       owner: context.repository.owner,
