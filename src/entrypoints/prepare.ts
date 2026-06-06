@@ -17,7 +17,10 @@ import { prepareMcpConfig } from "../mcp/install-mcp-server";
 import { createPrompt } from "../create-prompt";
 import { createClient } from "../github/api/client";
 import { fetchGitHubData } from "../github/data/fetcher";
-import { parseGitHubContext } from "../github/context";
+import {
+  parseGitHubContext,
+  isPullRequestReviewCommentEvent,
+} from "../github/context";
 import { getMode } from "../modes/registry";
 
 async function run() {
@@ -38,6 +41,48 @@ async function run() {
       throw new Error(
         "Actor does not have write permissions to the repository",
       );
+    }
+
+    // Step 4: Fetch message from Gitea and inject it if PR Review Comment
+    if (
+      isPullRequestReviewCommentEvent(context) &&
+      (context.payload.comment?.body ?? context.payload.review?.content) === ""
+    ) {
+      const { owner, repo } = context.repository;
+      try {
+        const prCommentsResponse = await client.api.listPullRequestComments(
+          owner,
+          repo,
+          context.entityNumber,
+        );
+
+        const comments = prCommentsResponse.data as Array<{
+          id: number;
+          user?: { login: string };
+          body: string;
+          created_at: string;
+        }>;
+
+        const matching = comments
+          .filter((c) => c.user?.login === context.actor)
+          .sort(
+            (a, b) =>
+              new Date(b.created_at).getTime() -
+              new Date(a.created_at).getTime(),
+          );
+
+        if (matching[0]) {
+          (context.payload as any).comment = {
+            id: matching[0].id,
+            body: matching[0].body,
+            user: matching[0].user,
+          };
+        }
+      } catch (error) {
+        console.warn(
+          `Could not fetch Gitea inline review comment body: ${error}`,
+        );
+      }
     }
 
     // Step 4: Check trigger conditions
