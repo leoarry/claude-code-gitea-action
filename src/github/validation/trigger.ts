@@ -238,6 +238,9 @@ async function enrichPrReviewCommentContext(
         id: latestComment.id,
         body: latestComment.body,
         user: latestComment.user,
+        path: latestComment.path,
+        position: latestComment.position ?? latestComment.original_position,
+        pull_request_review_id: latestComment.pull_request_review_id,
       };
     }
     (context.payload as any).sender ??= {

@@ -22,62 +22,41 @@ export async function createInitialComment(
   const jobRunLink = createJobRunLink(owner, repo, context.runId);
   const initialBody = createCommentBody(jobRunLink);
 
-  try {
-    let response;
+  console.log(
+    `Creating comment for ${context.isPR ? "PR" : "issue"} #${context.entityNumber}`,
+  );
 
-    console.log(
-      `Creating comment for ${context.isPR ? "PR" : "issue"} #${context.entityNumber}`,
-    );
-    console.log(`Repository: ${owner}/${repo}`);
-
-    // Only use createReplyForReviewComment if it's a PR review comment AND we have a comment_id
-    if (
-      isPullRequestReviewCommentEvent(context) &&
-      context.payload.comment?.id
-    ) {
-      console.log(`Creating PR review comment reply`);
-      response = await api.customRequest(
-        "POST",
-        `/api/v1/repos/${owner}/${repo}/pulls/${context.entityNumber}/comments/${context.payload.comment.id}/replies`,
-        {
-          body: initialBody,
-        },
-      );
-    } else {
-      // For all other cases (issues, issue comments, or missing comment_id)
-      console.log(`Creating issue comment via API`);
-      response = await api.createIssueComment(
-        owner,
-        repo,
-        context.entityNumber,
-        initialBody,
-      );
-    }
-
-    // Output the comment ID for downstream steps using GITHUB_OUTPUT
-    const githubOutput = process.env.GITHUB_OUTPUT!;
-    appendFileSync(githubOutput, `claude_comment_id=${response.data.id}\n`);
-    console.log(`✅ Created initial comment with ID: ${response.data.id}`);
-    return response.data.id;
-  } catch (error) {
-    console.error("Error in initial comment:", error);
-
-    // Always fall back to regular issue comment if anything fails
-    try {
-      const response = await api.createIssueComment(
-        owner,
-        repo,
-        context.entityNumber,
-        initialBody,
-      );
-
-      const githubOutput = process.env.GITHUB_OUTPUT!;
-      appendFileSync(githubOutput, `claude_comment_id=${response.data.id}\n`);
-      console.log(`✅ Created fallback comment with ID: ${response.data.id}`);
-      return response.data.id;
-    } catch (fallbackError) {
-      console.error("Error creating fallback comment:", fallbackError);
-      throw fallbackError;
+  // For inline review comment events, reply in the same thread using the
+  // Gitea reply endpoint: POST /pulls/{index}/comments/{id}/replies
+  if (isPullRequestReviewCommentEvent(context)) {
+    const comment = (context.payload as any).comment;
+    if (comment?.id) {
+      try {
+        console.log(`Replying to PR review comment ${comment.id}`);
+        const response = await api.customRequest(
+          "POST",
+          `/api/v1/repos/${owner}/${repo}/pulls/${context.entityNumber}/comments/${comment.id}/replies`,
+          { body: initialBody },
+        );
+        const githubOutput = process.env.GITHUB_OUTPUT!;
+        appendFileSync(githubOutput, `claude_comment_id=${response.data.id}\n`);
+        console.log(`✅ Created review reply with ID: ${response.data.id}`);
+        return response.data.id;
+      } catch (error) {
+        console.warn(`Failed to reply to review comment, falling back to issue comment: ${error}`);
+      }
     }
   }
+
+  // Default: create a regular issue/PR comment
+  const response = await api.createIssueComment(
+    owner,
+    repo,
+    context.entityNumber,
+    initialBody,
+  );
+  const githubOutput = process.env.GITHUB_OUTPUT!;
+  appendFileSync(githubOutput, `claude_comment_id=${response.data.id}\n`);
+  console.log(`✅ Created initial comment with ID: ${response.data.id}`);
+  return response.data.id;
 }

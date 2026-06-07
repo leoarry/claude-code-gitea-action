@@ -602,18 +602,21 @@ ${sanitizeContent(context.directPrompt)}
 ${
   eventData.eventName === "pull_request_review_comment"
     ? `<comment_tool_info>
-IMPORTANT: For this inline PR review comment, you have been provided with ONLY the mcp__gitea__update_pull_request_comment tool to update this specific review comment.
+IMPORTANT: Use mcp__gitea__update_pull_request_comment to update your comment in the review thread.
 
-Tool usage example for mcp__gitea__update_pull_request_comment:
+Tool usage example:
 {
+  "owner": "${context.repository.split("/")[0]}",
+  "repo": "${context.repository.split("/")[1]}",
+  "commentId": ${context.claudeCommentId},
   "body": "Your comment text here"
 }
 All four parameters (owner, repo, commentId, body) are required.
 </comment_tool_info>`
     : `<comment_tool_info>
-IMPORTANT: For this event type, you have been provided with ONLY the mcp__gitea__update_issue_comment tool to update comments.
+IMPORTANT: Use mcp__gitea__update_issue_comment to update your comment.
 
-Tool usage example for mcp__gitea__update_issue_comment:
+Tool usage example:
 {
   "owner": "${context.repository.split("/")[0]}",
   "repo": "${context.repository.split("/")[1]}",
