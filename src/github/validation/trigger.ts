@@ -181,80 +181,79 @@ export function escapeRegExp(string: string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-async function checkPrReviewContainsTrigger(
+// Gitea omits review comment content from the webhook payload for
+// pull_request_review_comment events. Fetch it from the API and inject it
+// into the context so checkContainsTrigger can find the trigger phrase.
+async function enrichPrReviewCommentContext(
   context: ParsedGitHubContext,
   api: GiteaApiClient,
-): Promise<boolean> {
+): Promise<void> {
   if (
-    isPullRequestReviewCommentEvent(context) &&
-    (context.payload.comment?.body ?? context.payload.review?.content) === ""
+    !isPullRequestReviewCommentEvent(context) ||
+    (context.payload.comment?.body ?? context.payload.review?.content)
   ) {
-    try {
-      const { owner, repo } = context.repository;
-      const {
-        inputs: { triggerPhrase },
-      } = context;
-      const reviewsResp = await api.listPullRequestReviews(
-        owner,
-        repo,
-        context.entityNumber,
-      );
-      const reviewsList: any[] = Array.isArray(reviewsResp.data)
-        ? reviewsResp.data
-        : [];
-      if (reviewsList.length > 0) {
-        const latestReview = reviewsList.sort(
-          (a: any, b: any) =>
-            new Date(b.submitted_at ?? b.updated_at).getTime() -
-            new Date(a.submitted_at ?? a.updated_at).getTime(),
-        )[0];
-        const commentsResp = await api.listPullRequestReviewComments(
-          owner,
-          repo,
-          context.entityNumber,
-          latestReview.id,
-        );
-        const commentsList: any[] = Array.isArray(commentsResp.data)
-          ? commentsResp.data
-          : [];
-        const latestComment = commentsList.sort(
-          (a: any, b: any) =>
-            new Date(b.updated_at ?? b.created_at).getTime() -
-            new Date(a.updated_at ?? a.created_at).getTime(),
-        )[0];
-        const content = latestComment?.body || latestReview?.body;
-        if (content) {
-          const regex = new RegExp(
-            `(^|\\s)${escapeRegExp(triggerPhrase)}([\\s.,!?;:]|$)`,
-          );
-          if (regex.test(content)) {
-            console.log(
-              `Comment contains exact trigger phrase '${triggerPhrase}'`,
-            );
-            return true;
-          }
-        }
-      }
-    } catch (error) {
-      console.warn(
-        `Could not fetch Gitea inline review comment body: ${error}`,
-      );
-      return false;
-    }
+    return;
   }
-  return false;
+
+  try {
+    const { owner, repo } = context.repository;
+    const reviewsResp = await api.listPullRequestReviews(
+      owner,
+      repo,
+      context.entityNumber,
+    );
+    const reviewsList: any[] = Array.isArray(reviewsResp.data)
+      ? reviewsResp.data
+      : [];
+    if (reviewsList.length === 0) return;
+
+    const latestReview = reviewsList.sort(
+      (a: any, b: any) =>
+        new Date(b.submitted_at ?? b.updated_at).getTime() -
+        new Date(a.submitted_at ?? a.updated_at).getTime(),
+    )[0];
+    const commentsResp = await api.listPullRequestReviewComments(
+      owner,
+      repo,
+      context.entityNumber,
+      latestReview.id,
+    );
+    const commentsList: any[] = Array.isArray(commentsResp.data)
+      ? commentsResp.data
+      : [];
+    const latestComment = commentsList.sort(
+      (a: any, b: any) =>
+        new Date(b.updated_at ?? b.created_at).getTime() -
+        new Date(a.updated_at ?? a.created_at).getTime(),
+    )[0];
+    const content = latestComment?.body || latestReview?.body;
+    if (!content) return;
+
+    (context.payload as any).review = {
+      ...(context.payload as any).review,
+      content,
+    };
+    if (latestComment) {
+      (context.payload as any).comment = {
+        id: latestComment.id,
+        body: latestComment.body,
+        user: latestComment.user,
+      };
+    }
+    (context.payload as any).sender ??= {
+      login: latestComment?.user?.login ?? latestReview?.user?.login,
+    };
+  } catch (error) {
+    console.warn(`Could not fetch Gitea inline review comment body: ${error}`);
+  }
 }
 
 export async function checkTriggerAction(
   context: ParsedGitHubContext,
   api: GiteaApiClient,
 ) {
-  const prReviewContainsTrigger = await checkPrReviewContainsTrigger(
-    context,
-    api,
-  );
-  const containsTrigger =
-    checkContainsTrigger(context) || prReviewContainsTrigger;
+  await enrichPrReviewCommentContext(context, api);
+  const containsTrigger = checkContainsTrigger(context);
   core.setOutput("contains_trigger", containsTrigger.toString());
   return containsTrigger;
 }
